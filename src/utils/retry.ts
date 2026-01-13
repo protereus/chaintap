@@ -1,7 +1,11 @@
-import pRetry, { Options as PRetryOptions } from 'p-retry';
+import pRetry from 'p-retry';
 import { Logger } from './logger.js';
 
-export interface RetryOptions extends Partial<PRetryOptions> {
+export interface RetryOptions {
+  retries?: number;
+  minTimeout?: number;
+  maxTimeout?: number;
+  factor?: number;
   logger?: Logger;
   operationName?: string;
 }
