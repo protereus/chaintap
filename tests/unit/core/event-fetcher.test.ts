@@ -387,9 +387,13 @@ describe('EventFetcher', () => {
       });
 
       mockDecoder.decode.mockImplementation((log: any) => ({
-        name: log.topics[0] === transferTopic ? 'Transfer' : 'Approval',
-        args: {},
-        log,
+        contractAddress: log.address,
+        blockNumber: log.blockNumber,
+        blockTimestamp: 0,
+        transactionHash: log.transactionHash,
+        logIndex: log.logIndex,
+        eventName: log.topics[0] === transferTopic ? 'Transfer' : 'Approval',
+        eventData: {},
       }));
 
       const events = await fetcher.fetchEvents(
@@ -407,8 +411,8 @@ describe('EventFetcher', () => {
       });
 
       expect(events).toHaveLength(2);
-      expect(events[0].name).toBe('Transfer');
-      expect(events[1].name).toBe('Approval');
+      expect(events[0].eventName).toBe('Transfer');
+      expect(events[1].eventName).toBe('Approval');
     });
   });
 
