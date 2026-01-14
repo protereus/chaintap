@@ -24,7 +24,7 @@ providers:
     priority: 1
   - url: "https://eth.llamarpc.com"
     priority: 2
-  - url: "https://rpc.ankr.com/eth"
+  - url: "https://ethereum.publicnode.com"
     priority: 3
 
 options:
