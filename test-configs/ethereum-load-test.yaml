@@ -1,0 +1,25 @@
+chain: ethereum
+database:
+  type: sqlite
+  path: ./load-test-ethereum.db
+
+contracts:
+  # UNI Token for 1M+ block load test
+  - address: "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"
+    name: "UNI Token"
+    events:
+      - Transfer
+    from_block: 17000000  # ~1.5M blocks ago
+
+providers:
+  - url: "${ALCHEMY_URL}"
+    priority: 1
+  - url: "https://eth.llamarpc.com"
+    priority: 2
+  - url: "https://rpc.ankr.com/eth"
+    priority: 3
+
+options:
+  batch_size: 10  # Start conservative with free tier
+  confirmations: 0  # Historical data, no confirmations needed
+  max_retries: 5

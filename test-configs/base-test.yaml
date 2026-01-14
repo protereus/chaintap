@@ -1,0 +1,26 @@
+chain: base
+database:
+  type: sqlite
+  path: ./test-base.db
+
+contracts:
+  # USDC on Base
+  - address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    name: "USDC (Base)"
+    events:
+      - Transfer
+    from_block: 10000000  # Recent block
+
+providers:
+  - url: "https://mainnet.base.org"
+    priority: 1
+  - url: "https://base.llamarpc.com"
+    priority: 2
+  - url: "https://rpc.ankr.com/base"
+    priority: 3
+
+options:
+  batch_size: 100
+  confirmations: 0
+  poll_interval: 5000
+  max_retries: 5

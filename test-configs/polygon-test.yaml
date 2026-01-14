@@ -1,0 +1,26 @@
+chain: polygon
+database:
+  type: sqlite
+  path: ./test-polygon.db
+
+contracts:
+  # USDC on Polygon - high volume
+  - address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
+    name: "USDC (Polygon)"
+    events:
+      - Transfer
+    from_block: 50000000  # Recent block for quick test
+
+providers:
+  - url: "https://polygon-rpc.com"
+    priority: 1
+  - url: "https://rpc.ankr.com/polygon"
+    priority: 2
+  - url: "https://polygon.llamarpc.com"
+    priority: 3
+
+options:
+  batch_size: 50
+  confirmations: 128  # Polygon needs more confirmations
+  poll_interval: 10000
+  max_retries: 5

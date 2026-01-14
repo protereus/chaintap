@@ -1,0 +1,26 @@
+chain: arbitrum
+database:
+  type: sqlite
+  path: ./test-arbitrum.db
+
+contracts:
+  # USDC on Arbitrum
+  - address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+    name: "USDC (Arbitrum)"
+    events:
+      - Transfer
+    from_block: 180000000  # Recent block
+
+providers:
+  - url: "https://arb1.arbitrum.io/rpc"
+    priority: 1
+  - url: "https://rpc.ankr.com/arbitrum"
+    priority: 2
+  - url: "https://arbitrum.llamarpc.com"
+    priority: 3
+
+options:
+  batch_size: 100
+  confirmations: 0
+  poll_interval: 5000
+  max_retries: 5
