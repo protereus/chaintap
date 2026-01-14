@@ -1,0 +1,22 @@
+chain: ethereum
+database:
+  type: sqlite
+  path: ./test-live.db
+
+contracts:
+  - address: "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"
+    name: "UNI Token"
+    abi: "./test-abis/uni.json"  # Use manual ABI to bypass Etherscan
+    events:
+      - Transfer
+    from_block: 19000000
+
+providers:
+  - url: "https://eth-mainnet.g.alchemy.com/v2/q7JZvM10cGQx4KktpMxczFG3lMwOBoXb"
+    priority: 1
+  - url: "https://mainnet.infura.io/v3/74f4cdf939fc40848587780ea40cfa9a"
+    priority: 2
+
+options:
+  batch_size: 1000
+  confirmations: 12
