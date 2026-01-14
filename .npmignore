@@ -1,0 +1,51 @@
+# Test files and configs
+tests/
+*.test.ts
+*.spec.ts
+test-*.yaml
+*.db
+*.db-shm
+*.db-wal
+
+# Development files
+.sisyphus/
+.claude/
+LIVE-TEST-RESULTS.md
+COMPREHENSIVE-TEST-REPORT.md
+chaintap-event-indexer-spec.md
+CLAUDE.md
+
+# Build artifacts
+tsconfig.json
+vitest.config.ts
+eslint.config.js
+.prettierrc.json
+
+# Source files (only ship dist/)
+src/
+
+# Development configs
+.env
+.env.*
+chaintap.yaml
+
+# Git
+.git/
+.gitignore
+
+# Editor
+.vscode/
+.idea/
+
+# Temp
+tmp/
+temp/
+*.tmp
+
+# ABI cache
+.chaintap/
+abi-cache/
+
+# Node
+node_modules/
+npm-debug.log*

@@ -21,6 +21,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "npm run clean && npm run build && npm run test && npm run typecheck",
     "dev": "tsx src/cli/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -45,7 +46,7 @@
     "dapp",
     "cli"
   ],
-  "author": "",
+  "author": "ChainTap Contributors",
   "license": "MIT",
   "repository": {
     "type": "git",
