@@ -37,7 +37,7 @@ export class Indexer {
   ) {
     // Initialize ABI fetcher with cache directory
     const cacheDir = path.join(os.homedir(), '.chaintap', 'abi-cache');
-    this.abiFetcher = new ABIFetcher(cacheDir);
+    this.abiFetcher = new ABIFetcher(cacheDir, process.env.ETHERSCAN_API_KEY);
   }
 
   /**

@@ -8,7 +8,7 @@ import { getCachedABI, cacheABI, readManualABI } from './cache.js';
  * Map of chain IDs to their explorer API base URLs
  */
 const EXPLORER_APIS: Record<number, string> = {
-  1: 'https://api.etherscan.io/api',
+  1: 'https://api.etherscan.io/v2/api',
   10: 'https://api-optimistic.etherscan.io/api',
   56: 'https://api.bscscan.com/api',
   137: 'https://api.polygonscan.com/api',
@@ -98,6 +98,7 @@ export class ABIFetcher {
     url.searchParams.set('module', 'contract');
     url.searchParams.set('action', 'getabi');
     url.searchParams.set('address', address);
+    url.searchParams.set('chainid', String(chainId));
 
     if (this.apiKey) {
       url.searchParams.set('apikey', this.apiKey);

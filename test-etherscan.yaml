@@ -1,0 +1,21 @@
+chain: ethereum
+database:
+  type: sqlite
+  path: ./test-etherscan.db
+
+contracts:
+  # UNI Token - NO manual ABI, should fetch from Etherscan
+  - address: "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"
+    name: "UNI Token"
+    events:
+      - Transfer
+      - Approval
+    from_block: 19000000
+
+providers:
+  - url: "https://eth-mainnet.g.alchemy.com/v2/q7JZvM10cGQx4KktpMxczFG3lMwOBoXb"
+    priority: 1
+
+options:
+  batch_size: 10
+  confirmations: 0
