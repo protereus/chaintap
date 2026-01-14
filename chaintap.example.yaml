@@ -1,0 +1,50 @@
+# ChainTap Configuration Example
+# Copy this file to chaintap.yaml and customize for your needs
+
+# Target blockchain
+# Options: ethereum, polygon, arbitrum, optimism, base, bsc
+chain: ethereum
+
+# Database configuration
+database:
+  type: sqlite
+  path: ./data/events.db
+
+# Contracts to index
+contracts:
+  # Example: UNI Token
+  - address: "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"
+    name: "UNI Token"
+    events:
+      - Transfer
+      - Approval
+    from_block: 17000000  # Optional: start block (null = latest)
+    # abi: "./abis/uni.json"  # Optional: manual ABI path
+
+  # Example: Multiple events
+  - address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+    name: "USDC"
+    events:
+      - Transfer
+    from_block: null  # Start from latest block
+
+# RPC Providers (at least one required)
+providers:
+  # Public RPC (free, rate-limited)
+  - url: "https://eth.llamarpc.com"
+    priority: 1
+
+  # Private RPC with API key (environment variable)
+  - url: "${ALCHEMY_URL}"
+    priority: 2
+
+  # Backup provider
+  - url: "https://rpc.ankr.com/eth"
+    priority: 3
+
+# Optional: Advanced options
+options:
+  batch_size: 2000        # Blocks per getLogs request
+  confirmations: 12       # Wait N blocks before indexing (reorg safety)
+  poll_interval: 15000    # Milliseconds between polls in watch mode
+  max_retries: 5          # Max retries for failed RPC calls
