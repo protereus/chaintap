@@ -6,9 +6,12 @@ import { StorageError } from '../utils/errors.js';
 export class SQLiteAdapter implements StorageAdapter {
   private db: Database.Database | null = null;
   private dbPath: string;
+  private pendingEvents: DecodedEvent[] = [];
+  private readonly BATCH_COMMIT_SIZE: number;
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, batchCommitSize: number = 10000) {
     this.dbPath = dbPath;
+    this.BATCH_COMMIT_SIZE = batchCommitSize;
   }
 
   async init(): Promise<void> {
@@ -121,6 +124,112 @@ export class SQLiteAdapter implements StorageAdapter {
     } catch (error) {
       throw new StorageError(
         `Failed to get last synced block: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  /**
+   * Insert events in batches to optimize memory and performance
+   */
+  async insertEventsBatched(
+    contractAddress: string,
+    chainId: number,
+    events: DecodedEvent[]
+  ): Promise<void> {
+    this.ensureDb();
+
+    // Add events to pending buffer
+    this.pendingEvents.push(...events);
+
+    // Flush if batch size reached
+    if (this.pendingEvents.length >= this.BATCH_COMMIT_SIZE) {
+      await this.flushBatch(contractAddress, chainId);
+    }
+  }
+
+  /**
+   * Flush all pending events to database
+   */
+  async flushPending(contractAddress?: string, chainId?: number): Promise<void> {
+    if (this.pendingEvents.length > 0 && contractAddress && chainId) {
+      await this.flushBatch(contractAddress, chainId);
+    }
+  }
+
+  /**
+   * Internal method to flush batch with atomic transaction
+   */
+  private async flushBatch(
+    contractAddress: string,
+    chainId: number
+  ): Promise<void> {
+    this.ensureDb();
+
+    if (this.pendingEvents.length === 0) {
+      return;
+    }
+
+    // Get batch to commit and clear pending
+    const batch = this.pendingEvents.splice(0);
+    const lastBlock = Math.max(...batch.map(e => e.blockNumber));
+
+    try {
+      const commitTransaction = this.db!.transaction(() => {
+        // Insert events
+        const eventStmt = this.db!.prepare(`
+          INSERT OR IGNORE INTO events (
+            contract_address,
+            block_number,
+            block_timestamp,
+            transaction_hash,
+            log_index,
+            event_name,
+            event_data,
+            indexed_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        for (const event of batch) {
+          eventStmt.run(
+            event.contractAddress,
+            event.blockNumber,
+            event.blockTimestamp,
+            event.transactionHash,
+            event.logIndex,
+            event.eventName,
+            JSON.stringify(event.eventData),
+            Math.floor(Date.now() / 1000)
+          );
+        }
+
+        // Update sync state
+        const syncStmt = this.db!.prepare(`
+          INSERT INTO sync_state (contract_address, chain_id, last_block, last_sync)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(contract_address) DO UPDATE SET
+            last_block = excluded.last_block,
+            last_sync = excluded.last_sync
+        `);
+
+        syncStmt.run(
+          contractAddress,
+          chainId,
+          lastBlock,
+          Math.floor(Date.now() / 1000)
+        );
+      });
+
+      commitTransaction();
+
+      // Force GC hint after big commit if available
+      if (global.gc && batch.length > 5000) {
+        global.gc();
+      }
+    } catch (error) {
+      // Put events back in pending on failure
+      this.pendingEvents.unshift(...batch);
+      throw new StorageError(
+        `Failed to flush batch: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }

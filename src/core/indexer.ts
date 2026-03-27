@@ -6,6 +6,8 @@ import { ABIFetcher } from '../abi/fetcher.js';
 import { EventDecoder } from '../abi/decoder.js';
 import { EventFetcher } from './event-fetcher.js';
 import { RPCError } from '../utils/errors.js';
+import { CHAIN_DEFAULTS } from '../config/chains.js';
+import { CheckpointManager } from '../utils/checkpoint.js';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
@@ -28,6 +30,7 @@ export class Indexer {
   private running = false;
   private watchTasks: Map<string, NodeJS.Timeout> = new Map();
   private abiFetcher: ABIFetcher;
+  private checkpointManager: CheckpointManager;
 
   constructor(
     private config: Config,
@@ -38,6 +41,37 @@ export class Indexer {
     // Initialize ABI fetcher with cache directory
     const cacheDir = path.join(os.homedir(), '.chaintap', 'abi-cache');
     this.abiFetcher = new ABIFetcher(cacheDir, process.env.ETHERSCAN_API_KEY);
+
+    // Initialize checkpoint manager
+    const baseDir = path.join(os.homedir(), '.chaintap');
+    this.checkpointManager = new CheckpointManager(baseDir, this.logger);
+
+    // Apply chain-specific defaults to config
+    this.applyChainDefaults();
+  }
+
+  /**
+   * Apply chain-specific defaults to configuration
+   */
+  private applyChainDefaults(): void {
+    const defaults = CHAIN_DEFAULTS[this.config.chain];
+
+    // Apply defaults only if user hasn't specified values
+    if (this.config.options.batch_size === 2000) {
+      // 2000 is the schema default, so override with chain-specific default
+      this.config.options.batch_size = defaults.batch_size;
+    }
+
+    if (this.config.options.confirmations === 12) {
+      // 12 is the schema default, so override with chain-specific default
+      this.config.options.confirmations = defaults.confirmations;
+    }
+
+    this.logger.info({
+      chain: this.config.chain,
+      batch_size: this.config.options.batch_size,
+      confirmations: this.config.options.confirmations,
+    }, 'Applied chain-specific defaults');
   }
 
   /**
@@ -173,16 +207,43 @@ export class Indexer {
   async indexBlocks(
     contractConfig: ContractConfig,
     fromBlock: number,
-    toBlock: number
+    toBlock: number,
+    options: { resume?: boolean } = {}
   ): Promise<void> {
     const chainId = this.getChainId(this.config.chain);
     const contractAddress = contractConfig.address.toLowerCase();
 
+    // Check for existing checkpoint if resume is enabled (default: true)
+    const shouldResume = options.resume !== false;
+    let actualFromBlock = fromBlock;
+    let totalEvents = 0;
+
+    if (shouldResume) {
+      const checkpoint = await this.checkpointManager.load(chainId, contractAddress);
+      if (checkpoint && checkpoint.targetBlock === toBlock && checkpoint.status === 'in_progress') {
+        // Resume from checkpoint
+        actualFromBlock = checkpoint.lastBlock + 1;
+        totalEvents = checkpoint.totalEvents;
+
+        this.logger.info({
+          contract: contractConfig.name || contractAddress,
+          resumeFromBlock: actualFromBlock,
+          checkpointBlock: checkpoint.lastBlock,
+          eventsIndexed: totalEvents,
+        }, 'Resuming from checkpoint');
+      } else if (checkpoint) {
+        this.logger.debug({
+          contract: contractConfig.name || contractAddress,
+          checkpoint,
+        }, 'Checkpoint exists but not applicable (different range or already completed)');
+      }
+    }
+
     this.logger.info({
       contract: contractConfig.name || contractAddress,
-      fromBlock,
+      fromBlock: actualFromBlock,
       toBlock,
-      blockCount: toBlock - fromBlock + 1,
+      blockCount: toBlock - actualFromBlock + 1,
     }, 'Indexing blocks');
 
     // Get provider
@@ -206,38 +267,119 @@ export class Indexer {
         this.config.options.batch_size
       );
 
-      // Fetch events
-      const events = await fetcher.fetchEvents(
+      // Use streaming API to process events in batches
+      let currentBlock = actualFromBlock;
+      let lastCheckpointTime = Date.now();
+      const CHECKPOINT_INTERVAL_BLOCKS = 10000;
+      const CHECKPOINT_INTERVAL_TIME = 60000; // 60 seconds
+
+      for await (const eventBatch of fetcher.fetchEventsStream(
         contractAddress,
         contractConfig.events,
-        fromBlock,
+        actualFromBlock,
         toBlock
-      );
+      )) {
+        // Use batched insert
+        await (this.storage as any).insertEventsBatched(
+          contractAddress,
+          chainId,
+          eventBatch
+        );
+
+        totalEvents += eventBatch.length;
+
+        // Update current block from batch (use the highest block number in batch)
+        if (eventBatch.length > 0) {
+          currentBlock = Math.max(...eventBatch.map(e => e.blockNumber));
+        }
+
+        // Log memory usage per batch
+        const memUsage = process.memoryUsage();
+        this.logger.debug({
+          contract: contractConfig.name || contractAddress,
+          batchSize: eventBatch.length,
+          totalEvents,
+          currentBlock,
+          heapUsedMB: Math.round(memUsage.heapUsed / 1024 / 1024),
+          heapTotalMB: Math.round(memUsage.heapTotal / 1024 / 1024),
+        }, 'Batch processed');
+
+        // Save checkpoint periodically (every 10K blocks or 60 seconds)
+        const now = Date.now();
+        const blocksSinceStart = currentBlock - actualFromBlock;
+        const timeSinceCheckpoint = now - lastCheckpointTime;
+
+        if (
+          shouldResume &&
+          (blocksSinceStart > 0 && blocksSinceStart % CHECKPOINT_INTERVAL_BLOCKS === 0 ||
+           timeSinceCheckpoint >= CHECKPOINT_INTERVAL_TIME)
+        ) {
+          await this.checkpointManager.save({
+            version: '0.2.0',
+            contract: contractAddress,
+            chainId,
+            lastBlock: currentBlock,
+            timestamp: new Date().toISOString(),
+            totalEvents,
+            status: 'in_progress',
+            startBlock: fromBlock,
+            targetBlock: toBlock,
+          });
+          lastCheckpointTime = now;
+        }
+      }
 
       await this.providerPool.reportSuccess(provider.id);
 
-      // Store events and update sync state
-      await this.storage.updateSyncStateAndInsertEvents(
-        contractAddress,
-        chainId,
-        toBlock,
-        events
-      );
+      // Final flush of pending events
+      if (typeof (this.storage as any).flushPending === 'function') {
+        await (this.storage as any).flushPending(contractAddress, chainId);
+      }
+
+      // Clear checkpoint on successful completion
+      if (shouldResume) {
+        await this.checkpointManager.clear(chainId, contractAddress);
+      }
 
       this.logger.info({
         contract: contractConfig.name || contractAddress,
-        fromBlock,
+        fromBlock: actualFromBlock,
         toBlock,
-        eventCount: events.length,
+        eventCount: totalEvents,
       }, 'Indexed blocks successfully');
 
     } catch (error) {
       await this.providerPool.reportFailure(provider.id, error as Error);
 
+      // Save checkpoint on error for crash recovery
+      if (shouldResume && totalEvents > 0) {
+        try {
+          await this.checkpointManager.save({
+            version: '0.2.0',
+            contract: contractAddress,
+            chainId,
+            lastBlock: actualFromBlock, // Use last successfully indexed block
+            timestamp: new Date().toISOString(),
+            totalEvents,
+            status: 'in_progress',
+            startBlock: fromBlock,
+            targetBlock: toBlock,
+          });
+          this.logger.info({
+            contract: contractConfig.name || contractAddress,
+            lastBlock: actualFromBlock,
+          }, 'Checkpoint saved after error for recovery');
+        } catch (checkpointError) {
+          this.logger.warn({
+            error: checkpointError instanceof Error ? checkpointError.message : String(checkpointError),
+          }, 'Failed to save checkpoint after error');
+        }
+      }
+
       this.logger.error({
         error: error instanceof Error ? error.message : String(error),
         contract: contractConfig.name || contractAddress,
-        fromBlock,
+        fromBlock: actualFromBlock,
         toBlock,
         providerId: provider.id,
       }, 'Failed to index blocks');

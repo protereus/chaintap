@@ -16,6 +16,8 @@ export function createWatchCommand(): Command {
     .description('Watch and index events from configured contracts in real-time')
     .option('-c, --config <path>', 'Path to configuration file', './chaintap.yaml')
     .option('-v, --verbose', 'Enable verbose logging', false)
+    .option('--resume', 'Resume from last checkpoint (default: true)', true)
+    .option('--no-resume', 'Start fresh, ignore checkpoints')
     .action(async (options) => {
       const logger = createLogger(options.verbose);
       let storage: SQLiteAdapter | null = null;

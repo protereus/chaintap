@@ -1,4 +1,5 @@
 import { ethers } from 'ethers';
+import { LRUCache } from 'lru-cache';
 import { EventDecoder } from '../abi/decoder.js';
 import { DecodedEvent } from './types.js';
 import { Logger } from '../utils/logger.js';
@@ -10,7 +11,7 @@ export interface EnrichedEvent extends DecodedEvent {
 
 export class EventFetcher {
   private blockRangeLimits: Map<string, number> = new Map();
-  private blockTimestampCache: Map<number, number> = new Map();
+  private blockTimestampCache: LRUCache<number, number>;
 
   constructor(
     private provider: ethers.JsonRpcProvider,
@@ -18,7 +19,14 @@ export class EventFetcher {
     private decoder: EventDecoder,
     private logger: Logger,
     private initialChunkSize: number = 2000
-  ) {}
+  ) {
+    // Initialize LRU cache with 100K entries max and 100 MB size limit
+    this.blockTimestampCache = new LRUCache<number, number>({
+      max: 100000, // Keep 100K blocks in cache
+      maxSize: 100 * 1024 * 1024, // 100 MB limit
+      sizeCalculation: () => 16, // ~16 bytes per entry (number key + number value + overhead)
+    });
+  }
 
   async fetchEvents(
     contractAddress: string,
@@ -26,8 +34,27 @@ export class EventFetcher {
     fromBlock: number,
     toBlock: number
   ): Promise<EnrichedEvent[]> {
-    const allLogs: ethers.Log[] = [];
+    // Collect all events from the stream
+    const allEvents: EnrichedEvent[] = [];
 
+    for await (const batch of this.fetchEventsStream(contractAddress, eventNames, fromBlock, toBlock)) {
+      allEvents.push(...batch);
+    }
+
+    return allEvents;
+  }
+
+  /**
+   * Stream events in batches to avoid memory accumulation
+   * This is the new memory-efficient implementation
+   */
+  async *fetchEventsStream(
+    contractAddress: string,
+    eventNames: string[],
+    fromBlock: number,
+    toBlock: number,
+    maxEventsInMemory: number = 50000
+  ): AsyncGenerator<EnrichedEvent[]> {
     // Get the current chunk size for this provider (cached or initial)
     let chunkSize = this.blockRangeLimits.get(this.providerId) ?? this.initialChunkSize;
 
@@ -41,6 +68,7 @@ export class EventFetcher {
     });
 
     let currentBlock = fromBlock;
+    let batchBuffer: ethers.Log[] = [];
 
     while (currentBlock <= toBlock) {
       const rangeEnd = Math.min(currentBlock + chunkSize - 1, toBlock);
@@ -61,7 +89,21 @@ export class EventFetcher {
           toBlock: rangeEnd,
         });
 
-        allLogs.push(...logs);
+        batchBuffer.push(...logs);
+
+        // Yield batch if it exceeds max size
+        if (batchBuffer.length >= maxEventsInMemory) {
+          const enrichedEvents = await this.enrichWithTimestamps(batchBuffer);
+
+          this.logger.debug({
+            providerId: this.providerId,
+            contractAddress,
+            batchSize: enrichedEvents.length,
+          }, 'Yielding event batch');
+
+          yield enrichedEvents;
+          batchBuffer = []; // Clear memory
+        }
 
         // Move to next chunk
         currentBlock = rangeEnd + 1;
@@ -94,19 +136,21 @@ export class EventFetcher {
       }
     }
 
-    // Enrich logs with timestamps
-    const enrichedEvents = await this.enrichWithTimestamps(allLogs);
+    // Yield remaining events in buffer
+    if (batchBuffer.length > 0) {
+      const enrichedEvents = await this.enrichWithTimestamps(batchBuffer);
 
-    this.logger.info({
-      providerId: this.providerId,
-      contractAddress,
-      fromBlock,
-      toBlock,
-      eventCount: enrichedEvents.length,
-      finalChunkSize: chunkSize,
-    }, 'Fetched events');
+      this.logger.info({
+        providerId: this.providerId,
+        contractAddress,
+        fromBlock,
+        toBlock,
+        eventCount: enrichedEvents.length,
+        finalChunkSize: chunkSize,
+      }, 'Fetched final event batch');
 
-    return enrichedEvents;
+      yield enrichedEvents;
+    }
   }
 
   private async enrichWithTimestamps(logs: ethers.Log[]): Promise<EnrichedEvent[]> {

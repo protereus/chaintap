@@ -39,12 +39,21 @@ const DatabaseConfigSchema = z.object({
   path: z.string().min(1, 'Database path is required'),
 });
 
+// Memory options configuration schema
+const MemoryOptionsSchema = z.object({
+  max_heap_mb: z.number().int().positive().optional(),
+  batch_commit_size: z.number().int().positive().default(10000),
+  max_events_in_memory: z.number().int().positive().default(50000),
+  enable_gc_hints: z.boolean().default(true),
+}).optional();
+
 // Options configuration schema
 const OptionsConfigSchema = z.object({
   batch_size: z.number().int().positive().default(2000),
   confirmations: z.number().int().nonnegative().default(12),
   poll_interval: z.number().int().positive().default(15000),
   max_retries: z.number().int().positive().default(5),
+  memory_options: MemoryOptionsSchema,
 }).default({
   batch_size: 2000,
   confirmations: 12,
@@ -69,6 +78,7 @@ export type ContractConfig = z.infer<typeof ContractConfigSchema>;
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
 export type DatabaseConfig = z.infer<typeof DatabaseConfigSchema>;
 export type OptionsConfig = z.infer<typeof OptionsConfigSchema>;
+export type MemoryOptions = z.infer<typeof MemoryOptionsSchema>;
 export type Chain = z.infer<typeof ChainSchema>;
 
 /**

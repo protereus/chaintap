@@ -18,6 +18,8 @@ export function createBackfillCommand(): Command {
     .requiredOption('--to-block <number|latest>', 'Ending block number or "latest"')
     .option('-c, --config <path>', 'Path to configuration file', './chaintap.yaml')
     .option('-v, --verbose', 'Enable verbose logging', false)
+    .option('--resume', 'Resume from last checkpoint (default: true)', true)
+    .option('--no-resume', 'Start fresh, ignore checkpoints')
     .action(async (options) => {
       const logger = createLogger(options.verbose);
       let storage: SQLiteAdapter | null = null;
@@ -102,8 +104,10 @@ export function createBackfillCommand(): Command {
             });
             const initialEventCount = initialCount.length;
 
-            // Index blocks for this contract
-            await indexer.indexBlocks(contractConfig, fromBlock, toBlock);
+            // Index blocks for this contract with resume option
+            await indexer.indexBlocks(contractConfig, fromBlock, toBlock, {
+              resume: options.resume,
+            });
 
             // Get final event count
             const finalCount = await storage.queryEvents({

@@ -99,8 +99,13 @@ describe('ABIFetcher', () => {
 
       await fetcher.getABI(testAddress, 137);
 
+      // V2 API uses unified endpoint with chainid parameter
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('api.polygonscan.com'),
+        expect.stringContaining('api.etherscan.io/v2/api'),
+        expect.any(Object)
+      );
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('chainid=137'),
         expect.any(Object)
       );
     });
@@ -120,8 +125,13 @@ describe('ABIFetcher', () => {
 
       await fetcher.getABI(testAddress, 42161);
 
+      // V2 API uses unified endpoint with chainid parameter
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('api.arbiscan.io'),
+        expect.stringContaining('api.etherscan.io/v2/api'),
+        expect.any(Object)
+      );
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('chainid=42161'),
         expect.any(Object)
       );
     });
@@ -141,8 +151,13 @@ describe('ABIFetcher', () => {
 
       await fetcher.getABI(testAddress, 10);
 
+      // V2 API uses unified endpoint with chainid parameter
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('api-optimistic.etherscan.io'),
+        expect.stringContaining('api.etherscan.io/v2/api'),
+        expect.any(Object)
+      );
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('chainid=10'),
         expect.any(Object)
       );
     });
@@ -162,8 +177,13 @@ describe('ABIFetcher', () => {
 
       await fetcher.getABI(testAddress, 8453);
 
+      // V2 API uses unified endpoint with chainid parameter
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('api.basescan.org'),
+        expect.stringContaining('api.etherscan.io/v2/api'),
+        expect.any(Object)
+      );
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('chainid=8453'),
         expect.any(Object)
       );
     });
@@ -183,8 +203,13 @@ describe('ABIFetcher', () => {
 
       await fetcher.getABI(testAddress, 56);
 
+      // V2 API uses unified endpoint with chainid parameter
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('api.bscscan.com'),
+        expect.stringContaining('api.etherscan.io/v2/api'),
+        expect.any(Object)
+      );
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('chainid=56'),
         expect.any(Object)
       );
     });
